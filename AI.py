@@ -214,7 +214,7 @@ class ML(EDA):
             plt.show()           
             
 
-b=ML(file_path=r"E:\BILAL\Bitcoin_Historical_Data.csv")
+b=ML(file_path=r"Bitcoin_Historical_Data.csv")
 print("***********CLEANING FILE**************")
 b.cleanfile()
 print("***********ANALYSIS**************")
