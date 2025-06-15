@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import seaborn as sns
 import logging
 import os
@@ -69,8 +69,9 @@ class EDA(LOAD):
                 gr1 = self.filee.groupby("Date").agg({"High": "max", "Low": "min"})
                 gr2 = self.filee.groupby("Date").agg({"Open": "max", "Close": "min"})
                 gr3 = self.filee.groupby("Date")["Volume"].mean().reset_index()
+                gr4=self.filee.describe()
                 
-                return gr1, gr2, gr3
+                return gr1, gr2, gr3,gr4
         
             except Exception as e:
                 logging.error(e)
@@ -287,6 +288,7 @@ class BitcoinApp:
         self.style.configure('Status.TLabel', font=('Segoe UI', 9), foreground='#888888')
         self.style.configure('Accent.TButton', background=accent_color, foreground=fg_color)
         self.style.configure('Secondary.TButton', background=secondary_color, foreground=fg_color)
+        self.style.configure('Logout.TButton', background='#ff4d4d', foreground=fg_color)
 
     def _setup_ui(self):
         # Main container
@@ -301,8 +303,13 @@ class BitcoinApp:
                                    style='Title.TLabel')
         self.title_label.pack(side=tk.LEFT)
         
+        # Add logout button to header
+        self.logout_btn = ttk.Button(self.header_frame, text="Logout", 
+                                   command=self.logout, style='Logout.TButton')
+        self.logout_btn.pack(side=tk.RIGHT, padx=5)
+        
         self.status_label = ttk.Label(self.header_frame, text="No file loaded", style='Status.TLabel')
-        self.status_label.pack(side=tk.RIGHT)
+        self.status_label.pack(side=tk.RIGHT, padx=10)
         
         # Body - using Notebook for tabs
         self.notebook = ttk.Notebook(self.main_frame)
@@ -349,17 +356,33 @@ class BitcoinApp:
         sys.stdout = TextRedirector(self.console, "stdout")
         sys.stderr = TextRedirector(self.console, "stderr")
 
+    def logout(self):
+        if messagebox.askyesno("Logout", "Are you sure you want to logout?"):
+            self.root.destroy()
+            # Here you could add code to return to a login screen if you had one
+            print("User logged out")
+
     def _setup_file_tab(self):
         # File selection section
         file_select_frame = ttk.LabelFrame(self.file_tab, text="File Selection")
         file_select_frame.pack(fill=tk.X, padx=10, pady=5)
         
         self.path_label = ttk.Label(file_select_frame, text="No file selected", 
-                                  style='Subtitle.TLabel')
+                                style='Subtitle.TLabel')
         self.path_label.pack(side=tk.LEFT, padx=5, pady=5)
         
-        select_btn = ttk.Button(file_select_frame, text="Select CSV File", 
-                               command=self.select_file, style='Accent.TButton')
+        # Create a frame for the right-aligned buttons
+        button_frame = ttk.Frame(file_select_frame)
+        button_frame.pack(side=tk.RIGHT)
+        
+        # Add AutoFit button first
+        autofit_btn = ttk.Button(button_frame, text="AutoFit Columns", 
+                            command=self.autofit_columns, style='Secondary.TButton')
+        autofit_btn.pack(side=tk.RIGHT, padx=5, pady=5)
+        
+        # Then add the Select File button
+        select_btn = ttk.Button(button_frame, text="Select CSV File", 
+                            command=self.select_file, style='Accent.TButton')
         select_btn.pack(side=tk.RIGHT, padx=5, pady=5)
         
         # File operations section
@@ -372,11 +395,11 @@ class BitcoinApp:
         }
         
         clean_btn = ttk.Button(file_ops_frame, text="Clean File", 
-                              command=self.clean_file, **btn_config)
+                            command=self.clean_file, **btn_config)
         clean_btn.grid(row=0, column=0, padx=10, pady=10)
         
         save_btn = ttk.Button(file_ops_frame, text="Save Cleaned File", 
-                             command=self.save_file, **btn_config)
+                            command=self.save_file, **btn_config)
         save_btn.grid(row=0, column=1, padx=10, pady=10)
         
         # File preview section
@@ -395,6 +418,25 @@ class BitcoinApp:
                                 command=self.file_preview.xview)
         scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.file_preview.configure(xscrollcommand=scroll_x.set)
+        
+    def autofit_columns(self):
+        """Auto-resize all columns in the file preview to fit their contents"""
+        if not self.file_preview.get_children():
+            return  # No data to fit
+            
+        # First, set all columns to minimum width
+        for col in self.file_preview['columns']:
+            self.file_preview.column(col, width=50)  # Reset to minimum width
+            
+        # Then calculate the maximum width needed for each column
+        for col in self.file_preview['columns']:
+            max_len = max(
+                len(str(col)),  # Header width
+                *[len(str(self.file_preview.set(item, col))) for item in self.file_preview.get_children()],  # Data width
+                100  # Minimum width
+            )
+            # Set column width with some padding
+            self.file_preview.column(col, width=max_len * 8 + 20)
 
     def _setup_eda_tab(self):
         # EDA buttons section
@@ -405,7 +447,14 @@ class BitcoinApp:
                             command=self.perform_eda, style='Accent.TButton')
         eda_btn.pack(side=tk.LEFT, padx=5, pady=5)
         
-        visualize_btn = ttk.Button(eda_btn_frame, text="Visualize Data", 
+        # Add dropdown for visualization selection
+        self.vis_options = ["High/Low Prices", "Open/Close Prices", "Volume Trend", "Correlation Heatmap"]
+        self.vis_var = tk.StringVar(value=self.vis_options[0])
+        
+        vis_menu = ttk.OptionMenu(eda_btn_frame, self.vis_var, self.vis_options[0], *self.vis_options)
+        vis_menu.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        visualize_btn = ttk.Button(eda_btn_frame, text="Show Visualization", 
                                   command=self.visualize_data, style='Secondary.TButton')
         visualize_btn.pack(side=tk.LEFT, padx=5, pady=5)
         
@@ -413,15 +462,43 @@ class BitcoinApp:
         eda_results_frame = ttk.LabelFrame(self.eda_tab, text="EDA Results")
         eda_results_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        self.eda_text = scrolledtext.ScrolledText(eda_results_frame, wrap=tk.WORD, 
+        # Create a PanedWindow for resizable split between text and visualization
+        self.eda_paned = ttk.Panedwindow(eda_results_frame, orient=tk.VERTICAL)
+        self.eda_paned.pack(fill=tk.BOTH, expand=True)
+        
+        # Text results frame (top)
+        eda_text_frame = ttk.Frame(self.eda_paned)
+        self.eda_text = scrolledtext.ScrolledText(eda_text_frame, wrap=tk.WORD, 
                                                 bg='#1e1e2d', fg='#e0e0e0',
                                                 insertbackground='white',
                                                 font=('Consolas', 9))
         self.eda_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.eda_paned.add(eda_text_frame, weight=1)
         
-        # Plot display section
-        self.plot_frame = ttk.Frame(eda_results_frame)
-        self.plot_frame.pack(fill=tk.BOTH, expand=True)
+        # Visualization frame (bottom) with scrollbars
+        self.vis_frame = ttk.Frame(self.eda_paned)
+        
+        # Create canvas with scrollbars
+        self.vis_canvas = tk.Canvas(self.vis_frame, bg='#2d2d3d', highlightthickness=0)
+        self.vis_scroll_y = ttk.Scrollbar(self.vis_frame, orient="vertical", command=self.vis_canvas.yview)
+        self.vis_scroll_x = ttk.Scrollbar(self.vis_frame, orient="horizontal", command=self.vis_canvas.xview)
+        
+        self.vis_canvas.configure(yscrollcommand=self.vis_scroll_y.set, xscrollcommand=self.vis_scroll_x.set)
+        
+        # Pack scrollbars and canvas
+        self.vis_scroll_y.pack(side="right", fill="y")
+        self.vis_scroll_x.pack(side="bottom", fill="x")
+        self.vis_canvas.pack(side="left", fill="both", expand=True)
+        
+        # Create frame for plot inside canvas
+        self.plot_frame = ttk.Frame(self.vis_canvas)
+        self.vis_canvas.create_window((0, 0), window=self.plot_frame, anchor="nw")
+        
+        # Bind configuration for scroll region
+        self.plot_frame.bind("<Configure>", lambda e: self.vis_canvas.configure(
+            scrollregion=self.vis_canvas.bbox("all")))
+        
+        self.eda_paned.add(self.vis_frame, weight=2)
 
     def _setup_ml_tab(self):
         # ML buttons section
@@ -494,6 +571,7 @@ class BitcoinApp:
             
             # Preview the file
             self._preview_file()
+            
 
     def _preview_file(self):
         try:
@@ -510,14 +588,18 @@ class BitcoinApp:
             # Create headings
             for col in df.columns:
                 self.file_preview.heading(col, text=col)
-                self.file_preview.column(col, width=100, anchor=tk.CENTER)
+                self.file_preview.column(col, width=100, anchor=tk.CENTER)  # Default width
             
             # Add data
             for _, row in df.iterrows():
                 self.file_preview.insert('', tk.END, values=list(row))
                 
+            # Auto-fit columns after loading
+            self.autofit_columns()
+                
         except Exception as e:
             self._log_error(f"Error previewing file: {str(e)}")
+            
 
     def clean_file(self):
         if self.model:
@@ -588,7 +670,7 @@ class BitcoinApp:
             def _perform_eda():
                 try:
                     start_time = time.time()
-                    self.gr1, self.gr2, self.gr3 = self.model.analysis()
+                    self.gr1, self.gr2, self.gr3,self.gr4= self.model.analysis()
                     self._update_progress(50)
                     
                     if self.gr1 is not None and self.gr2 is not None:
@@ -601,6 +683,9 @@ class BitcoinApp:
                         
                         self.eda_text.insert(tk.END, "=== Average Volume by Year ===\n")
                         self.eda_text.insert(tk.END, str(self.gr3) + "\n\n")
+                        
+                        self.eda_text.insert(tk.END, "=== Descriptive Statistics ===\n")
+                        self.eda_text.insert(tk.END, str(self.gr4) + "\n\n")
                         
                         self._update_progress(100)
                         self._update_status("EDA completed successfully")
@@ -630,61 +715,34 @@ class BitcoinApp:
                     for widget in self.plot_frame.winfo_children():
                         widget.destroy()
                     
-                    # Get the current visualization index and cycle it
-                    plot_type = self.visualization_index % 4  # We have 4 plot types
-                    self.visualization_index += 1
+                    # Get the selected visualization type from dropdown
+                    selected_vis = self.vis_var.get()
+                    plot_type = self.vis_options.index(selected_vis)
                     
                     # Create and display the plot
                     fig = self.model.visualize1(self.gr1, self.gr2, plot_type)
                     self._update_progress(50)
                     
                     if fig is not None:
-                        # Create a container frame with scrollbars
-                        container = ttk.Frame(self.plot_frame)
-                        container.pack(fill=tk.BOTH, expand=True)
-                        
-                        # Create canvas with scrollbars
-                        canvas = tk.Canvas(container)
-                        scroll_y = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-                        scroll_x = ttk.Scrollbar(container, orient="horizontal", command=canvas.xview)
-                        
-                        # Configure canvas scrolling
-                        canvas.configure(
-                            yscrollcommand=scroll_y.set,
-                            xscrollcommand=scroll_x.set,
-                            bg='#2d2d3d',
-                            highlightthickness=0
-                        )
-                        
-                        # Pack scrollbars and canvas
-                        scroll_y.pack(side="right", fill="y")
-                        scroll_x.pack(side="bottom", fill="x")
-                        canvas.pack(side="left", fill="both", expand=True)
-                        
-                        # Create frame for the plot inside canvas
-                        plot_frame = ttk.Frame(canvas)
-                        canvas.create_window((0, 0), window=plot_frame, anchor="nw")
-                        
                         # Display the matplotlib figure
-                        canvas_fig = FigureCanvasTkAgg(fig, master=plot_frame)
+                        canvas_fig = FigureCanvasTkAgg(fig, master=self.plot_frame)
                         canvas_fig.draw()
-                        canvas_fig.get_tk_widget().pack(padx=10, pady=10)
+                        canvas_fig.get_tk_widget().pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
                         
-                        # Add navigation toolbar below the plot
-                        toolbar = NavigationToolbar2Tk(canvas_fig, plot_frame)
+                        # Add navigation toolbar
+                        toolbar = NavigationToolbar2Tk(canvas_fig, self.plot_frame)
                         toolbar.update()
                         
-                        # Configure scroll region after widgets are drawn
-                        def _configure_scrollregion(event):
-                            canvas.configure(scrollregion=canvas.bbox("all"))
-                            # Limit minimum canvas size to figure size
-                            canvas.config(width=fig.get_size_inches()[0]*100, 
-                                        height=fig.get_size_inches()[1]*100)
+                        # Update canvas scroll region after plot is drawn
+                        self.plot_frame.update_idletasks()
+                        self.vis_canvas.configure(scrollregion=self.vis_canvas.bbox("all"))
                         
-                        plot_frame.bind("<Configure>", _configure_scrollregion)
+                        # Set minimum canvas size
+                        self.vis_canvas.config(width=fig.get_size_inches()[0]*100, 
+                                             height=fig.get_size_inches()[1]*100)
                         
                         self._update_progress(100)
-                        self._update_status(f"Showing visualization {self.visualization_index % 4 + 1}/4")
+                        self._update_status(f"Showing {selected_vis}")
                         self._log_message(f"Visualization generated in {time.time() - start_time:.2f} seconds")
                     else:
                         self._update_progress(0)
